@@ -11,6 +11,13 @@ payload = "Dummy string"
 
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        with open("server.log", "a") as f:
+            f.write(
+                "%s - - [%s] %s\n"
+                % (self.address_string(), self.log_date_time_string(), format % args)
+            )
+
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-Type", "application/xml")
