@@ -10,3 +10,4 @@ wheels/
 .venv
 server.log
 *.burp*
+*.req

